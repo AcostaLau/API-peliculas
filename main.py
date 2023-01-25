@@ -1,7 +1,9 @@
-from fastapi import FastAPI, Body
 
-# me permite crear esquemas
-from pydantic import BaseModel
+# el path sirve para el tipo de parametros de ruta y query para tipos de parametros query
+from fastapi import FastAPI, Body, Path, Query
+
+# me permite crear esquemas, field sirve para validar datos
+from pydantic import BaseModel, Field
 
 from typing import Optional
 
@@ -17,11 +19,29 @@ app.title = "Mi aplicacion con Fast APi"
 class Movie(BaseModel):
     # le digo que puede ser de tipo entero o None y que por defecto sea None
     id: Optional[int] = None
-    title: str
-    overview: str
-    year: int
-    rating: float
-    category: str
+    # con el field estamos validando el input, de forma que tiene que tener 1 como minimo y 15 como maximo
+    title: str = Field(min_length=1, max_length=15)
+
+    overview: str = Field(min_length=1, max_length=100)
+
+    # con le le indico el maximo del numero que puede ir
+    year: int = Field(le=2023)
+
+    rating: float = Field(le=10, ge=1)
+
+    category: str = Field(min_length=1, max_length=15)
+
+    class Config:
+        schema_extra = {
+            "example": {
+                "id": 1,
+                "title": 'Nombre pelicula',
+                "overview": "Resumen pelicula",
+                "year": 2023,
+                "rating": 9.2,
+                "category": "Categoria de la pelicula"
+            }
+        }
 
 
 movies = [
@@ -49,7 +69,8 @@ def get_movies():
 
 # busco la pelicula por su id, parametros de ruta
 @app.get('/movies/{id}', tags=['movies'])
-def get_movie(id: int):
+# estoy validando que el paraemtro sea mayor o igual a 1 y menor o igual que 2000
+def get_movie(id: int = Path(ge=1, le=2000)):
     movie = list(filter(lambda x: x['id'] == id, movies))
     if movie:
         return movie if len(movie) > 0 else 'No se encontro esa pelicula'
@@ -60,7 +81,7 @@ def get_movie(id: int):
 
 
 @app.get('/movies/', tags=['movies'])
-def get_movies_category(category: str):
+def get_movies_category(category: str = Query(min_length=5, max_length=15)):
     movie = list(filter(lambda x: x['category'] == category, movies))
 
     if movie:
