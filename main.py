@@ -1,12 +1,17 @@
 
 # el path sirve para el tipo de parametros de ruta y query para tipos de parametros query
-from fastapi import FastAPI, Body, Path, Query
+from fastapi import FastAPI, Body, Path, Query, Request, HTTPException, Depends
 
+
+# me sirve para enviar contenido en formato json
+from fastapi.responses import JSONResponse
 # me permite crear esquemas, field sirve para validar datos
 from pydantic import BaseModel, Field
 
 from typing import Optional
 
+from fastapi.security import HTTPBearer
+from jwt_manager import create_token, validate_token
 app = FastAPI()
 
 
@@ -14,6 +19,20 @@ app = FastAPI()
 app.title = "Mi aplicacion con Fast APi"
 # puedo cambiar la version de la app con este comando
 # app.version = "0.0.1"
+
+
+class JTWBearer(HTTPBearer):
+    async def __call__(self, request: Request):
+        auth = await super().__call__(request)
+        data = validate_token(auth.credentials)
+        if data['email'] != "admin@gmail.com":
+            raise HTTPException(
+                status_code=403, detail="Las credernciales son invalidas")
+
+
+class User(BaseModel):
+    email: str
+    password: str
 
 
 class Movie(BaseModel):
@@ -61,21 +80,30 @@ def read_root():
     return {"Hello": "World"}
 
 
+@app.post("/login", tags=["auth"])
+def login(user: User):
+    if user.email == "admin@gmail.com" and user.password == "admin":
+        token: str = create_token(user.dict())
+    return JSONResponse(content=token, status_code=200)
+
+
 # devuelvo listado de peliculas
-@app.get('/movies', tags=['movies'])
+
+
+@app.get('/movies', tags=['movies'], status_code=200, dependencies=[Depends(JTWBearer)])
 def get_movies():
-    return movies
+    return JSONResponse(content=movies, status_code=200)
 
 
 # busco la pelicula por su id, parametros de ruta
-@app.get('/movies/{id}', tags=['movies'])
+@app.get('/movies/{id}', tags=['movies'], status_code=200)
 # estoy validando que el paraemtro sea mayor o igual a 1 y menor o igual que 2000
 def get_movie(id: int = Path(ge=1, le=2000)):
     movie = list(filter(lambda x: x['id'] == id, movies))
     if movie:
-        return movie if len(movie) > 0 else 'No se encontro esa pelicula'
+        return JSONResponse(content=movie, status_code=200)
     else:
-        return []
+        return JSONResponse(content=[], status_code=404)
 
 # filtro peliculas por categoria, parametros query
 
@@ -85,22 +113,22 @@ def get_movies_category(category: str = Query(min_length=5, max_length=15)):
     movie = list(filter(lambda x: x['category'] == category, movies))
 
     if movie:
-        return movie
+        return JSONResponse(content=movie)
     else:
-        return []
+        return JSONResponse(content=[])
 
 
-@app.post('/movies', tags=['movies'])
+@app.post('/movies', tags=['movies'], status_code=201)
 def create_movie(movie: Movie):
     # el objeto a diccionario para mantener la integridad de la lista original
     movies.append(dict(movie))
     for item in movies:
         print(type(item))
-    return movies
+    return JSONResponse(content={"mensaje": "Se ha registrado la pelicula"}, status_code=201)
 
 
 # para modificar la pelicula necesitamos el id, por eso lo requerimos como parametro de ruta
-@app.put('/movies/{id}', tags=['movies'])
+@app.put('/movies/{id}', tags=['movies'], status_code=200)
 def modificate_movie(id: int, movie: Movie) -> dict:
     for movie_item in movies:
         if movie_item['id'] == id:
@@ -109,17 +137,21 @@ def modificate_movie(id: int, movie: Movie) -> dict:
 
             new_movie = Movie(**movie.dict())
             movie_item.update(new_movie.dict())
-            return movie_item
+            return JSONResponse(content={"mensaje": "la pelicula ha sido modificada"}, status_code=200)
 
 
 # elimino un elemento de la lista
 
 
-@app.delete('/movies/{id}', tags=['movies'])
+@app.delete('/movies/{id}', tags=['movies'], status_code=200)
 def delete_movie(id: int):
     for movie in movies:
         if movie['id'] == id:
             movies.remove(movie)
-            return movies
+            return JSONResponse(content={
+                "mensaje": "Se ha eliminado correctamente"
+            }, status_code=200)
         else:
-            return 'No existe ese id'
+            return JSONResponse(content={
+                "mensaje": "No se encuentra esa pelicula"
+            })
